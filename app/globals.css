@@ -1,26 +1,41 @@
+/* Tailwind v4 */
 @import "tailwindcss";
 
+/* PyCharm-inspired dark theme */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #2b2b2b;          /* page background */
+  --panel: #3c3f41;       /* cards/panels */
+  --border: #5a5f63;      /* panel/input borders */
+  --text: #e6e6e6;        /* primary text */
+  --muted: #b3b3b3;       /* secondary text */
+  --accent: #4ec9b0;      /* green accent */
+  --accent-700: #3ba393;  /* hover */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html, body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Base form styles (no @apply) */
+input, select, textarea {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+input::placeholder, textarea::placeholder {
+  color: #9aa0a6;
+}
+
+/* Buttons */
+button {
+  border-radius: 0.75rem;
 }
