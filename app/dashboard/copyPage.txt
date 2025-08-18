@@ -78,11 +78,11 @@ export default function Page() {
 
   // One class for all controls so they size consistently and can shrink
   const ctl =
-    "w-full max-w-full min-w-0 h-10 px-3 rounded-lg box-border " +
-    "border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] " +
-    "text-base sm:text-sm leading-tight " + // ≥16px on mobile → avoids iOS zoom
-    "placeholder:text-[#9aa0a6] truncate appearance-none " + // no wrapping, no native widening
-    "focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40";
+  "w-full min-w-0 h-10 px-3 rounded-lg border border-[var(--border)] " +
+  "bg-[var(--panel)] text-[var(--text)] text-base sm:text-sm leading-tight " +
+  "placeholder:text-[#9aa0a6] truncate appearance-none " +
+  "focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40";
+
   // Bootstrap auth
   useEffect(() => {
     (async () => {
@@ -253,7 +253,7 @@ export default function Page() {
 
   // Header
   return (
-    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] overflow-x-hidden">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <header className="sticky top-0 z-10 bg-[color:rgba(63,65,69,0.85)] backdrop-blur border-b border-[var(--border)]">
         <div className="max-w-5xl mx-auto px-4 py-3">
           {/* Top row: title + actions — stacks on mobile, row on ≥sm */}
@@ -351,120 +351,104 @@ export default function Page() {
           storageKey="panel:add"
           defaultOpen={true}
         >
-          <section className="w-full max-w-[100vw] sm:max-w-2xl md:max-w-3xl lg:max-w-5xl mx-auto overflow-x-hidden bg-[var(--panel)] rounded-2xl shadow-sm p-4 border border-[var(--border)]">
+          <section className="bg-[var(--panel)] rounded-2xl shadow-sm p-4 border border-[var(--border)] w-full max-w-full overflow-visible">
             <form
               onSubmit={onAdd}
-              className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7"
+              className="
+    w-full max-w-full
+    grid gap-3
+    [grid-template-columns:repeat(1,minmax(0,1fr))]
+    sm:[grid-template-columns:repeat(2,minmax(0,1fr))]
+    lg:[grid-template-columns:repeat(7,minmax(0,1fr))]
+  "
             >
-              {/* Type */}
-              <div className="min-w-0 lg:col-span-1">
-                <select
-                  value={txType}
-                  onChange={(e) => setTxType(e.target.value as TxType)}
-                  className={ctl}
-                >
-                  <option>Expense</option>
-                  <option>Income</option>
-                </select>
-              </div>
+              <select
+                value={txType}
+                onChange={(e) => setTxType(e.target.value as TxType)}
+                className={`${ctl} lg:col-span-1`}
+              >
+                <option>Expense</option>
+                <option>Income</option>
+              </select>
 
-              {/* Date */}
-              <div className="min-w-0 lg:col-span-1">
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className={ctl}
-                />
-              </div>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className={`${ctl} lg:col-span-1`}
+                placeholder="dd/mm/yyyy"
+              />
 
-              {/* Category */}
-              <div className="min-w-0 lg:col-span-1">
-                <select
-                  value={categoryId}
-                  onChange={(e) => setCategoryId(e.target.value)}
-                  className={ctl}
-                >
-                  <option value="">— Category —</option>
-                  {categories
-                    .filter((c) => c.type === txType)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
+              <select
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className={`${ctl} lg:col-span-1`}
+              >
+                <option value="">— Category —</option>
+                {categories
+                  .filter((c) => c.type === txType)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </select>
 
-              {/* Goal */}
-              <div className="min-w-0 lg:col-span-1">
-                <select
-                  value={goalId}
-                  onChange={(e) => setGoalId(e.target.value)}
-                  className={ctl}
-                >
-                  <option value="">— Goal (optional) —</option>
-                  {goals
-                    .filter((g) => g.status === "active")
-                    .map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
+              <select
+                value={goalId}
+                onChange={(e) => setGoalId(e.target.value)}
+                className={`${ctl} lg:col-span-1`}
+              >
+                <option value="">— Goal (optional) —</option>
+                {goals
+                  .filter((g) => g.status === "active")
+                  .map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+              </select>
 
-              {/* Description (wider on lg) */}
-              <div className="min-w-0 sm:col-span-2 lg:col-span-2">
-                <input
-                  placeholder="Description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className={ctl}
-                />
-              </div>
+              {/* Description gets more space on large screens */}
+              <input
+                placeholder="Description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className={`${ctl} sm:col-span-2 lg:col-span-2`}
+              />
 
-              {/* Amount */}
-              <div className="min-w-0 lg:col-span-1">
-                <input
-                  inputMode="decimal"
-                  placeholder="Amount"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className={ctl}
-                />
-              </div>
+              <input
+                placeholder="Amount"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className={`${ctl} lg:col-span-1`}
+              />
 
-              {/* Frequency */}
-              <div className="min-w-0 sm:col-span-1 lg:col-span-1">
-                <select
-                  value={frequency}
-                  onChange={(e) => setFrequency(e.target.value)}
-                  className={ctl}
-                >
-                  <option value="">One-time</option>
-                  <option>Weekly</option>
-                  <option>Fortnightly</option>
-                  <option>Monthly</option>
-                  <option>Quarterly</option>
-                </select>
-              </div>
+              <select
+                value={frequency}
+                onChange={(e) => setFrequency(e.target.value)}
+                className={`${ctl} lg:col-span-1`}
+              >
+                <option value="">One-time</option>
+                <option>Weekly</option>
+                <option>Fortnightly</option>
+                <option>Monthly</option>
+                <option>Quarterly</option>
+              </select>
 
-              {/* Notes (wide) */}
-              <div className="min-w-0 sm:col-span-2 lg:col-span-5">
-                <input
-                  placeholder="Notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className={ctl}
-                />
-              </div>
+              {/* Notes spans full width on small; half on sm; 5 cols on lg */}
+              <input
+                placeholder="Notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className={`${ctl} sm:col-span-2 lg:col-span-5`}
+              />
 
-              {/* Button */}
-              <div className="min-w-0 sm:col-span-2 lg:col-span-2">
+              {/* Button row */}
+              <div className="sm:col-span-2 lg:col-span-2">
                 <button
                   disabled={submitting}
-                  className="w-full min-w-0 h-10 px-4 rounded-xl bg-[var(--accent)] text-black hover:bg-[var(--accent-700)] transition"
+                  className="w-full sm:w-auto px-4 h-10 rounded-xl bg-[var(--accent)] text-black hover:bg-[var(--accent-700)] transition"
                 >
                   {submitting ? "Saving…" : "Add"}
                 </button>

@@ -20,7 +20,7 @@ export default function Disclosure({
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
-  const panelId = useId();
+  const id = useId();
 
   // SSR-safe initial state
   const [open, setOpen] = useState<boolean>(() => {
@@ -42,7 +42,7 @@ export default function Disclosure({
         type="button"
         onClick={() => setOpen(v => !v)}
         aria-expanded={open}
-        aria-controls={panelId}
+        aria-controls={id}
         className="inline-flex items-center gap-2 text-sm text-[var(--muted)] hover:text-[var(--text)]"
       >
         <Chevron open={open} />
@@ -53,7 +53,7 @@ export default function Disclosure({
           - Parent is a 1-row grid; we animate the row size 0fr ↔ 1fr
           - Child has overflow-hidden to mask during transition */}
       <div
-        id={panelId}
+        id={id}
         className="mt-3 grid transition-[grid-template-rows,opacity] duration-300 ease-out"
         style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
       >
