@@ -37,10 +37,9 @@ const COUNTRY_OPTIONS = [
 
 function guessCountry(): string {
   if (typeof window === "undefined") return "AU";
-  // navigator.language like "en-AU" -> "AU"
   const lang = navigator.language || "";
   const part = lang.split("-")[1]?.toUpperCase();
-  return COUNTRY_OPTIONS.find(c => c.code === part)?.code ?? "AU";
+  return COUNTRY_OPTIONS.find((c) => c.code === part)?.code ?? "AU";
 }
 
 export default function OnboardingPage() {
@@ -49,23 +48,23 @@ export default function OnboardingPage() {
 
   const [fullName, setFullName] = useState("");
   const [country, setCountry] = useState<string>("AU");
-  const currency = useMemo(
-    () => COUNTRY_TO_CCY[country] ?? "AUD",
-    [country]
-  );
+  const currency = useMemo(() => COUNTRY_TO_CCY[country] ?? "AUD", [country]);
+
+  // NEW: password fields
+  const [password, setPassword] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getSession(); // hydrate session (magic link / oauth)
+      const { data } = await supabase.auth.getSession();
       const s = data.session ?? null;
       setSession(s);
 
       // Prefill name from auth metadata if available
-      const metaName =
-        (s?.user?.user_metadata?.full_name as string | undefined) ?? "";
+      const metaName = (s?.user?.user_metadata?.full_name as string | undefined) ?? "";
       if (metaName) setFullName(metaName);
 
       // Guess country from browser locale on first load
@@ -85,21 +84,39 @@ export default function OnboardingPage() {
     e.preventDefault();
     setErr(null);
 
+    // Validate required fields
     if (!fullName.trim()) return setErr("Please enter your name.");
+    if (!country) return setErr("Please choose a country.");
+    if (!currency) return setErr("Currency is required.");
+    if (!password || !confirmPw) return setErr("Please set and confirm your password.");
+    if (password !== confirmPw) return setErr("Passwords do not match.");
+    if (password.length < 8) return setErr("Password must be at least 8 characters.");
 
     setSaving(true);
     try {
-      // Minimal, idempotent profile upsert
-      const { error } = await supabase.from("profiles").upsert({
-        id: session!.user.id,
-        full_name: fullName.trim(),
-        country,                // ensure column exists in your schema
-        currency,               // ensure column exists in your schema
-      });
-      if (error) throw error;
+      // 1) Set password for the magic-link-created user
+      const { error: pwErr } = await supabase.auth.updateUser({ password });
+      if (pwErr) throw pwErr;
 
-      if (typeof window !== "undefined")
-        window.location.replace(REDIRECT_AFTER_ONBOARD);
+      // 2) Upsert profile and mark onboarding complete
+      const {
+        data: { user },
+        error: userErr,
+      } = await supabase.auth.getUser();
+      if (userErr) throw userErr;
+      if (!user) throw new Error("No user found.");
+
+      const { error: upsertErr } = await supabase.from("profiles").upsert({
+        id: user.id,
+        full_name: fullName.trim(),
+        country,
+        currency,
+        onboarding_complete: true, // <- make sure this column exists
+      });
+      if (upsertErr) throw upsertErr;
+
+      // 3) Done
+      if (typeof window !== "undefined") window.location.replace(REDIRECT_AFTER_ONBOARD);
     } catch (e: unknown) {
       setErr(getErrorMessage(e));
     } finally {
@@ -123,6 +140,7 @@ export default function OnboardingPage() {
               onChange={(e) => setFullName(e.target.value)}
               placeholder="Your name"
               className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-[var(--panel)]"
+              required
             />
           </div>
 
@@ -133,6 +151,7 @@ export default function OnboardingPage() {
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-[var(--panel)]"
+                required
               >
                 {COUNTRY_OPTIONS.map((c) => (
                   <option key={c.code} value={c.code}>
@@ -152,6 +171,32 @@ export default function OnboardingPage() {
               <p className="text-[var(--muted)] text-xs mt-1">
                 Derived from country. You can change this later in Settings.
               </p>
+            </div>
+          </div>
+
+          {/* NEW: password fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm mb-1">Create password</label>
+              <input
+                type="password"
+                placeholder="At least 8 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-[var(--panel)]"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm mb-1">Confirm password</label>
+              <input
+                type="password"
+                placeholder="Re-enter password"
+                value={confirmPw}
+                onChange={(e) => setConfirmPw(e.target.value)}
+                className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-[var(--panel)]"
+                required
+              />
             </div>
           </div>
 

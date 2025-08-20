@@ -235,23 +235,6 @@ export default function ProfilePage() {
               className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-[var(--panel)] text-[var(--text)]"
             />
           </div>
-
-          {/* Week start */}
-          <div>
-            <label className="block text-sm mb-1 text-[var(--muted)]">
-              Week starts (1 = Mon … 7 = Sun)
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={7}
-              value={profile.week_start ?? 1}
-              onChange={(e) =>
-                setProfile({ ...profile, week_start: Number(e.target.value) })
-              }
-              className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-[var(--panel)] text-[var(--text)]"
-            />
-          </div>
         </div>
 
         {/* Save profile */}

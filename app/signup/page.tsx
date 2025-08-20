@@ -19,13 +19,7 @@ export default function SignUpPage() {
 
   const [session, setSession] = useState<Session | null>(null);
 
-  // mode + form state
-  const [mode, setMode] = useState<"password" | "magic">("password");
-  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [pw2, setPw2] = useState("");
-
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -41,7 +35,7 @@ export default function SignUpPage() {
     return () => unsub();
   }, []);
 
-  // Already signed in? bounce to dashboard
+  // Already signed in? bounce (callback will have taken them to onboarding)
   useEffect(() => {
     if (session && typeof window !== "undefined") {
       window.location.replace(nextParam || REDIRECT_AFTER_AUTH);
@@ -60,40 +54,22 @@ export default function SignUpPage() {
 
       const origin =
         typeof window !== "undefined" ? window.location.origin : "";
-      const callbackUrl = nextParam
-        ? `${origin}${AUTH_CALLBACK}?next=${encodeURIComponent(nextParam)}`
-        : `${origin}${AUTH_CALLBACK}`;
+      // Always mark this flow explicitly as "signup"
+      const callbackUrl = new URL(`${origin}${AUTH_CALLBACK}`);
+      if (nextParam) callbackUrl.searchParams.set("next", nextParam);
+      callbackUrl.searchParams.set("flow", "signup");
 
-      if (mode === "password") {
-        if (!pw) return setErr("Please enter a password.");
-        if (pw.length < 8)
-          return setErr("Password must be at least 8 characters.");
-        if (pw !== pw2) return setErr("Passwords do not match.");
+      // Magic link sign-up (passwordless, user creates password in onboarding)
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: callbackUrl.toString(),
+        },
+      });
+      if (error) throw error;
 
-        // Password sign-up (email confirmation enforced in Supabase settings)
-        const { error } = await supabase.auth.signUp({
-          email,
-          password: pw,
-          options: {
-            emailRedirectTo: callbackUrl,
-            data: { full_name: fullName || null },
-          },
-        });
-        if (error) throw error;
-        setMsg("Check your email to confirm your account. Then sign in.");
-      } else {
-        // Magic link sign-up (passwordless)
-        const { error } = await supabase.auth.signInWithOtp({
-          email,
-          options: {
-            shouldCreateUser: true,
-            emailRedirectTo: callbackUrl,
-            data: { full_name: fullName || null },
-          },
-        });
-        if (error) throw error;
-        setMsg("Magic link sent! Open it in this browser to finish sign-up.");
-      }
+      setMsg("Magic link sent! Open it on this device to continue.");
     } catch (e: unknown) {
       setErr(normalizeError(getErrorMessage(e)));
     } finally {
@@ -106,52 +82,12 @@ export default function SignUpPage() {
       <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-sm">
         <h1 className="text-2xl font-semibold">Create your account</h1>
         <p className="text-sm text-[var(--muted)] mb-4">
-          Choose password or magic link. You’ll confirm your email if required.
+          We’ll email you a secure sign‑in link. You’ll finish setup on the next
+          screen.
         </p>
 
-        {/* Mode switch */}
-        <div className="mb-4 inline-flex rounded-xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden">
-          <button
-            type="button"
-            disabled={sending}
-            onClick={() => setMode("password")}
-            className={`px-3 py-1.5 text-sm transition ${
-              mode === "password"
-                ? "bg-[var(--accent)] text-black"
-                : "bg-transparent text-[var(--muted)] hover:bg-[color:#464a4d]"
-            }`}
-          >
-            Password
-          </button>
-          <button
-            type="button"
-            disabled={sending}
-            onClick={() => setMode("magic")}
-            className={`px-3 py-1.5 text-sm transition ${
-              mode === "magic"
-                ? "bg-[var(--accent)] text-black"
-                : "bg-transparent text-[var(--muted)] hover:bg-[color:#464a4d]"
-            }`}
-          >
-            Magic link
-          </button>
-        </div>
-
         <form className="grid gap-3" onSubmit={onSubmit}>
-          <label className="text-sm" htmlFor="name">
-            Full name (optional)
-          </label>
-          <input
-            id="name"
-            type="text"
-            placeholder="e.g., Luca T."
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            disabled={sending}
-            className="h-10 rounded-lg px-3 border border-[var(--border)] bg-[var(--panel)]"
-          />
-
-          <label className="text-sm mt-2" htmlFor="email">
+          <label className="text-sm" htmlFor="email">
             Email
           </label>
           <input
@@ -166,51 +102,12 @@ export default function SignUpPage() {
             className="h-10 rounded-lg px-3 border border-[var(--border)] bg-[var(--panel)]"
           />
 
-          {mode === "password" && (
-            <>
-              <label className="text-sm mt-2" htmlFor="pw">
-                Password
-              </label>
-              <input
-                id="pw"
-                type="password"
-                autoComplete="new-password"
-                placeholder="At least 8 characters"
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                disabled={sending}
-                required
-                className="h-10 rounded-lg px-3 border border-[var(--border)] bg-[var(--panel)]"
-              />
-              <label className="text-sm mt-2" htmlFor="pw2">
-                Confirm password
-              </label>
-              <input
-                id="pw2"
-                type="password"
-                autoComplete="new-password"
-                placeholder="Re-enter password"
-                value={pw2}
-                onChange={(e) => setPw2(e.target.value)}
-                disabled={sending}
-                required
-                className="h-10 rounded-lg px-3 border border-[var(--border)] bg-[var(--panel)]"
-              />
-            </>
-          )}
-
           <button
             type="submit"
             disabled={sending}
             className="mt-3 h-10 rounded-xl bg-[var(--accent)] text-black hover:bg-[var(--accent-700)] transition disabled:opacity-60"
           >
-            {sending
-              ? mode === "password"
-                ? "Creating account…"
-                : "Sending link…"
-              : mode === "password"
-              ? "Create account"
-              : "Send sign-up link"}
+            {sending ? "Sending link…" : "Send sign‑up link"}
           </button>
         </form>
 

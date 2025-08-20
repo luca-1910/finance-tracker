@@ -10,6 +10,7 @@ const supabase = createClient(
 
 // Keep this consistent with your login page
 const REDIRECT_AFTER_AUTH = "/dashboard";
+const ONBOARDING = "/onboarding";
 
 export default function AuthCallbackPage() {
   const [stage, setStage] = useState<"loading" | "recovery" | "ready">("loading");
@@ -23,17 +24,28 @@ export default function AuthCallbackPage() {
 
   // Parse current URL bits (query + hash) on the client
   const parts = useMemo(() => {
-    if (typeof window === "undefined") return { query: new URLSearchParams(), hash: new URLSearchParams(), next: null as string | null };
+    if (typeof window === "undefined")
+      return {
+        query: new URLSearchParams(),
+        hash: new URLSearchParams(),
+        next: null as string | null,
+        flow: null as string | null,
+      };
     const url = new URL(window.location.href);
     const query = url.searchParams;
     // Supabase sometimes returns parameters in the hash fragment (#access_token=...), parse it as querystring
     const hash = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
     const next = query.get("next");
-    return { query, hash, next };
+    const flow = (query.get("flow") || "").toLowerCase();
+    return { query, hash, next, flow };
   }, []);
 
-    const go = (fallback: string) => {
+  // Generic redirect helpers
+  const go = (fallback: string) => {
     const target = parts.next || fallback;
+    if (typeof window !== "undefined") window.location.replace(target);
+  };
+  const goTo = (target: string) => {
     if (typeof window !== "undefined") window.location.replace(target);
   };
 
@@ -45,8 +57,7 @@ export default function AuthCallbackPage() {
       // 1) Password recovery flow (arrives with type=recovery in the URL hash)
       const hashType = parts.hash.get("type");
       if (hashType === "recovery") {
-        // Supabase sets the session from the URL; we can confirm it:
-        await supabase.auth.getSession(); // ensures local session storage is updated
+        await supabase.auth.getSession(); // ensure local session is set
         setStage("recovery");
         return;
       }
@@ -65,7 +76,14 @@ export default function AuthCallbackPage() {
           setSending(true);
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-          // Success — redirect
+
+          // If this came from our SIGNUP magic-link flow → onboarding first
+          if (parts.flow === "signup") {
+            goTo(ONBOARDING);
+            return;
+          }
+
+          // Otherwise normal behavior (respect ?next=)
           go(REDIRECT_AFTER_AUTH);
           return;
         } catch (e: unknown) {
@@ -74,15 +92,22 @@ export default function AuthCallbackPage() {
         } finally {
           setSending(false);
         }
-        return;
-      }
+      } else {
+        // 3) Magic-link (email OTP) or already-signed-in return.
+        // Supabase auto-parses #access_token/refresh_token in the URL and stores a session.
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-      // 3) Magic-link (email OTP) or already-signed-in return.
-      // Supabase auto-parses #access_token/refresh_token in the URL and stores a session.
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        go(REDIRECT_AFTER_AUTH);
-        return;
+        if (session) {
+          // Signed in without ?code (email OTP flow)
+          if (parts.flow === "signup") {
+            goTo(ONBOARDING);
+            return;
+          }
+          go(REDIRECT_AFTER_AUTH);
+          return;
+        }
       }
 
       // Nothing to exchange and no session → show fallback + link back to login
