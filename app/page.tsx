@@ -1,30 +1,55 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createClient, type Session } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function LandingPage() {
   const router = useRouter();
+  const [session, setSession] = useState<Session | null>(null);
+
+  // If already authenticated, skip landing → dashboard
+  useEffect(() => {
+    let unsub = () => {};
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session ?? null);
+      const sub = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+      unsub = () => sub.data.subscription.unsubscribe();
+    })();
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (session) router.replace("/dashboard");
+  }, [session, router]);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen overflow-x-hidden bg-[var(--bg)] text-[var(--text)] flex flex-col items-center justify-center p-6">
       <h1 className="text-4xl font-bold mb-4">Welcome to Finance Tracker</h1>
-      <p className="text-lg text-gray-300 mb-8">
+      <p className="text-lg text-[var(--muted)] mb-8">
         Track your expenses, set goals, and achieve financial freedom.
       </p>
 
       <div className="flex gap-4">
-        <button
-          onClick={() => router.push("/login")}
-          className="px-6 py-3 rounded-lg bg-green-500 hover:bg-green-600 text-black font-semibold"
+        <Link
+          href="/login"
+          className="px-6 py-3 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-700)] text-black font-semibold transition"
         >
           Sign In
-        </button>
-        <button
-          onClick={() => router.push("/signup")}
-          className="px-6 py-3 rounded-lg bg-white hover:bg-gray-200 text-black font-semibold"
+        </Link>
+        <Link
+          href="/signup"
+          className="px-6 py-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] hover:bg-[color:#464a4d] text-[var(--text)] font-semibold transition"
         >
           Sign Up
-        </button>
+        </Link>
       </div>
     </div>
   );

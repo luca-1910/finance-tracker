@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient, type Session } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -8,88 +9,133 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+const REDIRECT_AFTER_AUTH = "/dashboard";
+const AUTH_CALLBACK = "/auth/callback";
+
 export default function LoginPage() {
-  // ── Keep signed-in users away from /login
+  // Read ?next= from URL (middleware adds this when it bounces users)
+  const searchParams = useSearchParams();
+  const nextParam = searchParams?.get("next") || null;
+
+  // Keep signed-in users away from /login
   const [session, setSession] = useState<Session | null>(null);
 
-    // ── Form state
+  // Form state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"password" | "magic">("password");
+
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // Toggle between "password" and "magic link" modes
-  const [mode, setMode] = useState<"password" | "magic">("password");
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-    return () => sub.subscription.unsubscribe();
+    let unsub = () => {};
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session ?? null);
+      const sub = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+      unsub = () => sub.data.subscription.unsubscribe();
+    })();
+    return () => unsub();
   }, []);
-  if (session) {
-    if (typeof window !== "undefined") window.location.href = "/dashboard";
-    return null;
-  }
 
-  // After hooks, you can conditionally redirect/render
-  if (session) {
-    if (typeof window !== "undefined") window.location.href = "/dashboard";
-    return null;
-  }
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (session && typeof window !== "undefined") {
+      window.location.replace(nextParam || REDIRECT_AFTER_AUTH);
+    }
+  }, [session, nextParam]);
 
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    setMsg(null);
 
-  // ── Email + Password sign in
-  const onSignInWithPassword = async () => {
-    setErr(null); setMsg(null);
-    if (!email || !password) { setErr("Enter email and password."); return; }
+    if (!email) return setErr("Please enter your email.");
 
-    setSending(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setSending(false);
+    try {
+      setSending(true);
 
-    if (error) setErr(error.message);
-    else if (typeof window !== "undefined") window.location.href = "/dashboard";
+      if (mode === "password") {
+        if (!password) return setErr("Please enter your password.");
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        // success: auth state listener will redirect
+      } else {
+        const origin =
+          typeof window !== "undefined" ? window.location.origin : "";
+        const callbackUrl = nextParam
+          ? `${origin}${AUTH_CALLBACK}?next=${encodeURIComponent(nextParam)}`
+          : `${origin}${AUTH_CALLBACK}`;
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: callbackUrl,
+          },
+        });
+        if (error) throw error;
+        setMsg(
+          "Magic link sent! Check your email and open it in this browser."
+        );
+      }
+    } catch (e: unknown) {
+      setErr(normalizeError(getErrorMessage(e)));
+    } finally {
+      setSending(false);
+    }
   };
 
-  // ── Magic-link sign in (fallback)
-  const onSignInMagic = async () => {
-    setErr(null); setMsg(null);
-    if (!email.includes("@")) { setErr("Enter a valid email."); return; }
-
-    setSending(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/dashboard`
-            : undefined,
-      },
-    });
-    setSending(false);
-
-    if (error) setErr(error.message);
-    else setMsg("Check your inbox for a magic link and open it in this browser.");
-  };
-
-  // ── Optional: send password reset email
   const onResetPassword = async () => {
-    setErr(null); setMsg(null);
-    if (!email.includes("@")) { setErr("Enter the account email first."); return; }
+    setErr(null);
+    setMsg(null);
+    if (!email) return setErr("Enter the account email first.");
 
-    setSending(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      // Create /reset if you want a custom reset page; otherwise use onboarding
-      redirectTo:
-        typeof window !== "undefined"
-          ? `${window.location.origin}/onboarding`
-          : undefined,
-    });
-    setSending(false);
+    try {
+      setSending(true);
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "";
+      const callbackUrl = nextParam
+        ? `${origin}${AUTH_CALLBACK}?next=${encodeURIComponent(nextParam)}`
+        : `${origin}${AUTH_CALLBACK}`;
 
-    if (error) setErr(error.message);
-    else setMsg("If an account exists, we sent a reset link to your email.");
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo:callbackUrl,
+      });
+      if (error) throw error;
+      setMsg("If an account exists, we sent a reset link to your email.");
+    } catch (e: unknown) {
+      setErr(normalizeError(getErrorMessage(e)));
+    } finally {
+      setSending(false);
+    }
   };
+
+  // const oauth = async (provider: "google" | "apple") => {
+  //   setErr(null);
+  //   setMsg(null);
+  //   try {
+  //     setSending(true);
+  //     const { error } = await supabase.auth.signInWithOAuth({
+  //       provider,
+  //       options: {
+  //         redirectTo:
+  //           typeof window !== "undefined"
+  //             ? `${window.location.origin}${AUTH_CALLBACK}`
+  //             : undefined,
+  //       },
+  //     });
+  //     if (error) throw error;
+  //     // Redirect happens automatically on success
+  //   } catch (e: unknown) {
+  //     setErr(normalizeError(getErrorMessage(e)));
+  //   } finally {
+  //     setSending(false);
+  //   }
+  // };
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] grid place-items-center p-6">
@@ -102,6 +148,8 @@ export default function LoginPage() {
         {/* Mode switch */}
         <div className="mb-4 inline-flex rounded-xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden">
           <button
+            type="button"
+            disabled={sending}
             onClick={() => setMode("password")}
             className={`px-3 py-1.5 text-sm transition ${
               mode === "password"
@@ -112,6 +160,8 @@ export default function LoginPage() {
             Password
           </button>
           <button
+            type="button"
+            disabled={sending}
             onClick={() => setMode("magic")}
             className={`px-3 py-1.5 text-sm transition ${
               mode === "magic"
@@ -123,43 +173,63 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {/* Email field (shared) */}
-        <label className="block text-sm mb-1">Email</label>
-        <input
-          type="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-[var(--panel)] text-[var(--text)] placeholder:text-[#9aa0a6]"
-        />
+        {/* Form */}
+        <form className="grid gap-3" onSubmit={onSubmit}>
+          <label className="block text-sm mb-1" htmlFor="email">
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={sending}
+            className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-[var(--panel)] text-[var(--text)] placeholder:text-[#9aa0a6]"
+            required
+          />
 
-        {/* Password field (only in password mode) */}
-        {mode === "password" && (
-          <>
-            <label className="block text-sm mt-3 mb-1">Password</label>
-            <input
-              type="password"
-              placeholder="Your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-[var(--panel)] text-[var(--text)]"
-            />
-          </>
-        )}
+          {mode === "password" && (
+            <>
+              <label className="block text-sm mt-3 mb-1" htmlFor="password">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={sending}
+                className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-[var(--panel)] text-[var(--text)]"
+                required
+              />
+            </>
+          )}
 
-        {/* Primary action */}
-        <button
-          onClick={mode === "password" ? onSignInWithPassword : onSignInMagic}
-          disabled={sending}
-          className="mt-4 w-full px-4 py-2 rounded-xl bg-[var(--accent)] text-black hover:bg-[var(--accent-700)] transition disabled:opacity-60"
-        >
-          {sending ? "Please wait…" : mode === "password" ? "Sign in" : "Send login link"}
-        </button>
+          <button
+            type="submit"
+            disabled={sending}
+            className="mt-2 w-full h-10 rounded-xl bg-[var(--accent)] text-black hover:bg-[var(--accent-700)] transition disabled:opacity-60"
+          >
+            {sending
+              ? "Please wait…"
+              : mode === "password"
+              ? "Sign in"
+              : "Send login link"}
+          </button>
+        </form>
 
         {/* Secondary actions */}
         {mode === "password" ? (
           <div className="mt-3 flex justify-between text-xs text-[var(--muted)]">
-            <button onClick={onResetPassword} className="underline">
+            <button
+              onClick={onResetPassword}
+              disabled={sending}
+              className="underline"
+            >
               Forgot password?
             </button>
             <a className="underline" href="/signup">
@@ -168,15 +238,30 @@ export default function LoginPage() {
           </div>
         ) : (
           <p className="mt-3 text-xs text-[var(--muted)]">
-            New here? <a className="underline text-[var(--accent)]" href="/signup">Create an account</a>.
+            New here?{" "}
+            <a className="underline text-[var(--accent)]" href="/signup">
+              Create an account
+            </a>
+            .
           </p>
         )}
+
+        {/* OAuth (optional) */}
+        <div className="mt-4 grid gap-2">
+          {/* Uncomment when ready */}
+          {/* <button
+            disabled={sending}
+            onClick={() => oauth("google")}
+            className="h-10 rounded-xl border bg-[var(--panel)] hover:bg-[color:#464a4d] transition disabled:opacity-60"
+          >
+            Continue with Google
+          </button> */}
+        </div>
 
         {/* Status / error messages */}
         {msg && <p className="mt-3 text-sm text-emerald-400">{msg}</p>}
         {err && <p className="mt-3 text-sm text-rose-400">{err}</p>}
 
-        {/* Tip */}
         {mode === "magic" && (
           <p className="mt-2 text-xs text-[var(--muted)]">
             Tip: keep this tab open and click the link within a few minutes.
@@ -185,4 +270,23 @@ export default function LoginPage() {
       </div>
     </div>
   );
+}
+
+function normalizeError(m: string) {
+  if (/Email not confirmed/i.test(m))
+    return "Please verify your email before signing in.";
+  if (/Invalid login credentials/i.test(m))
+    return "Email or password is incorrect.";
+  if (/Token has expired|expired/i.test(m))
+    return "Your link expired. Request a new one.";
+  return m;
+}
+
+function getErrorMessage(err: unknown): string {
+  if (typeof err === "string") return err;
+  if (err && typeof err === "object" && "message" in err) {
+    const m = (err as { message?: unknown }).message;
+    return typeof m === "string" ? m : JSON.stringify(m);
+  }
+  return "Unexpected error. Please try again.";
 }
